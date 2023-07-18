@@ -13,7 +13,7 @@ func SwitchPrice(price int64) float64 {
 	return f
 }
 
-func main() {
+func main2() {
 
 	//antsTool.Test()
 	//asynqTool.Run()

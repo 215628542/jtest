@@ -2,78 +2,37 @@ package main
 
 import (
 	"fmt"
-	"runtime"
-	"strings"
+	"io/ioutil"
+	"net/http"
 )
 
-type T func([]int, int)
+func main() {
 
-func T1(sl []int, i int) T {
+	url := "http://www.1123123baidu.com"
+	method := "GET"
 
-	return func(sl []int, i int) {
+	client := &http.Client{}
+	req, err := http.NewRequest(method, url, nil)
 
-		defer func() {
-			if x := recover(); x != nil {
-				_, file, line, ok := runtime.Caller(1) // skip the first frame (panic itself)
-				if ok && strings.Contains(file, "runtime/") {
-					// The panic came from the runtime, most likely due to incorrect
-					// map/slice usage. The parent frame should have the real trigger.
-					_, file, line, ok = runtime.Caller(2)
-				}
-
-				// Include the file and line number info in the error, if runtime.Caller returned ok.
-				if ok {
-					fmt.Printf("panic--- [%s:%d]: %v\n", file, line, x)
-				} else {
-					fmt.Printf("panic----: %v\n", x)
-				}
-				fmt.Println(x)
-			}
-		}()
-		fmt.Println(sl[i])
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
-}
+	req.Header.Add("Cookie", "BAIDUID=FBFBD8ED0351289C2E57C40CDB3E51E7:FG=1; BIDUPSID=FBFBD8ED0351289CF59534D6B871C5CC; H_PS_PSSID=36551_38642_38831_39027_39023_38942_39014_38820_38824_26350_39041_39095_39100; PSTM=1689693729; BDSVRTM=44; BD_HOME=1")
 
-func T2(sl []int, i int) T {
-
-	return func(sl []int, i int) {
-
-		defer func() {
-			if x := recover(); x != nil {
-				_, file, line, ok := runtime.Caller(1) // skip the first frame (panic itself)
-				if ok && strings.Contains(file, "runtime/") {
-					// The panic came from the runtime, most likely due to incorrect
-					// map/slice usage. The parent frame should have the real trigger.
-					_, file, line, ok = runtime.Caller(2)
-				}
-
-				// Include the file and line number info in the error, if runtime.Caller returned ok.
-				if ok {
-					fmt.Printf("panic [%s:%d]: %v\n", file, line, x)
-				} else {
-					fmt.Printf("panic: %v\n", x)
-				}
-			}
-		}()
-		fmt.Println(sl[i])
+	res, err := client.Do(req)
+	fmt.Println(err)
+	fmt.Println(123)
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
-}
+	defer res.Body.Close()
 
-func main2() {
-
-	a := []int{1}
-	b := []int{2}
-
-	funcMap := make([]T, 0)
-	var t1, t2 T
-	t1 = T1(a, 1)
-	t2 = T2(b, 1)
-
-	funcMap = append(funcMap, t1, t2)
-	for _, f := range funcMap {
-		f([]int{}, 1)
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		fmt.Println(err)
+		return
 	}
-
-	fmt.Println("end====")
-
+	fmt.Println(string(body))
 }
