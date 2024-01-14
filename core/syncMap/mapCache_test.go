@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/pkg/errors"
 	"hash/crc32"
 	"sync"
@@ -11,23 +12,50 @@ import (
 // 多级缓存
 func TestMapCache(t *testing.T) {
 
-	// init 传初始化参数
-	// new可以放入 get方法中
-
-	InitMapCache("test1", 3, 2*time.Second, 3*time.Second)
-
-}
-
-func InitMapCache(mapKey string, bucketSize uint32, expireTime, expireTicker time.Duration) error {
-
-	bigSyncMap, err := NewBigSyncMaps(mapKey, bucketSize, expireTime, expireTicker)
+	InitSyncMapCache(BigSyncMapKey1, 3, 6*time.Second, 3*time.Second)
+	syncMap1, err := GetBigSyncMaps("test1")
 	if err != nil {
-		return err
+		panic(err)
 	}
-	go bigSyncMap.flushExpireData()
-	return nil
+	err = syncMap1.Set("aa", "aa_value")
+	if err != nil {
+		panic(err)
+	}
+	v1, _ := syncMap1.Get("aa")
+	fmt.Println(v1)
+
+	InitSyncMapCache(BigSyncMapKey2, 3, 8*time.Second, 4*time.Second)
+	syncMap2, err := GetBigSyncMaps("test2")
+	if err != nil {
+		panic(err)
+	}
+	err = syncMap2.Set("bb", "bb_value")
+	if err != nil {
+		panic(err)
+	}
+	v2, _ := syncMap2.Get("bb")
+	fmt.Println(v2)
+
+	ticker := time.NewTicker(3 * time.Second)
+	for {
+		select {
+		case <-ticker.C:
+			v2, bo := syncMap2.Get("bb")
+			fmt.Println("======")
+			fmt.Println(v2)
+			fmt.Println(bo)
+		}
+	}
 }
 
+// ====== syncMap类
+
+const (
+	BigSyncMapKey1 = "test1"
+	BigSyncMapKey2 = "test2"
+)
+
+var once sync.Once
 var bigSyncMaps map[string]*BigSyncMap
 
 type BigSyncMap struct {
@@ -50,8 +78,22 @@ type BigSyncMap struct {
 	expires *sync.Map
 }
 
+func InitSyncMapCache(mapKey string, bucketSize uint32, expireTime, expireTicker time.Duration) error {
+
+	bigSyncMap, err := NewBigSyncMaps(mapKey, bucketSize, expireTime, expireTicker)
+	if err != nil {
+		return err
+	}
+	go bigSyncMap.flushExpireData()
+	return nil
+}
+
 func NewBigSyncMaps(mapKey string, bucketSize uint32, expireTime, expireTicker time.Duration) (*BigSyncMap, error) {
 
+	once.Do(func() {
+		fmt.Println("=============== new ====================")
+		bigSyncMaps = make(map[string]*BigSyncMap, 0)
+	})
 	bigSyncMap, ok := bigSyncMaps[mapKey]
 	if ok {
 		return bigSyncMap, nil
@@ -75,7 +117,7 @@ func NewBigSyncMaps(mapKey string, bucketSize uint32, expireTime, expireTicker t
 		bucketSize:   bucketSize,
 		expireTime:   expireTime,
 		expireTicker: expireTicker,
-		cacheBuckets: make([]*sync.Map, 0),
+		cacheBuckets: make([]*sync.Map, bucketSize),
 		expires:      &sync.Map{},
 	}
 
@@ -99,7 +141,7 @@ func GetBigSyncMaps(mapKey string) (*BigSyncMap, error) {
 // 获取数据
 func (b *BigSyncMap) Get(key string) (interface{}, bool) {
 	index := checksum(key, b.bucketSize)
-	if index < len(b.cacheBuckets) {
+	if index >= len(b.cacheBuckets) {
 		return nil, false
 	}
 	return b.cacheBuckets[index].Load(key)
@@ -108,7 +150,7 @@ func (b *BigSyncMap) Get(key string) (interface{}, bool) {
 // 保存数据，并更新对应key的expire time
 func (b *BigSyncMap) Set(key string, val interface{}) error {
 	index := checksum(key, b.bucketSize)
-	if index < len(b.cacheBuckets) {
+	if index >= len(b.cacheBuckets) {
 		return errors.New("index out of range")
 	}
 	b.cacheBuckets[index].Store(key, val)
@@ -118,7 +160,7 @@ func (b *BigSyncMap) Set(key string, val interface{}) error {
 
 func (b *BigSyncMap) delete(key string) error {
 	index := checksum(key, b.bucketSize)
-	if index < len(b.cacheBuckets) {
+	if index >= len(b.cacheBuckets) {
 		return errors.New("index out of range")
 	}
 	b.cacheBuckets[index].Delete(key)
@@ -135,10 +177,12 @@ func (b *BigSyncMap) flushExpireData() {
 	for {
 		select {
 		case <-ticker.C:
+			fmt.Println(b.mapKey + "-开始清除过期缓存数据")
 			b.expires.Range(func(key, expireTime interface{}) bool {
 				if time.Since(expireTime.(time.Time)) > b.expireTime {
 					b.delete(key.(string))
 					b.expires.Delete(key.(string))
+					fmt.Println(b.mapKey + "-已删除缓存key-" + key.(string))
 				}
 				return true
 			})
