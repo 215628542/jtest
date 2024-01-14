@@ -12,13 +12,70 @@ import (
 
 func Exec() {
 
-	ZRangeByScore()
+	r, e := rdb.Get(context.Background(), "aaa").Result()
+	fmt.Println(r)
+	fmt.Println("=====")
+	fmt.Println(e)
+	if e != nil {
+		fmt.Println("===aabbcc==")
+	}
+	return
+
+	TestOrderTaskPool()
+	return
+
+	key := "test_list"
+	ctx := context.Background()
+	d, err := rdb.LPop(ctx, key).Result()
+
+	if err != nil {
+		fmt.Println("123")
+	}
+
+	fmt.Println(err)
+	fmt.Println(d)
+
+	//ZRangeByScore()
 	//key := "t1"
 	//ctx := context.Background()
 	//rdb.ZAdd()
 
 	//Ping()
 	//appendSlice()
+}
+
+func TestOrderTaskPool() {
+
+	type RequestBody struct {
+		Unique string `json:"unique"`
+		Data   string `json:"data"`
+	}
+	type RequestData struct {
+		Key             string
+		RequestId       int64
+		HandlerFuncType string
+		Data            []byte
+	}
+
+	fmt.Println(time.Now().Format("2006-01-02 15:04:05"))
+	for i := 1; i <= 1; i++ {
+
+		requestBody := RequestBody{
+			Unique: cast.ToString(i),
+			Data:   "",
+		}
+		requestBodyByte, _ := json.Marshal(requestBody)
+		req := &RequestData{
+			Data:            requestBodyByte,
+			HandlerFuncType: "wx_pay_notify",
+		}
+		reqTmp, _ := json.Marshal(req)
+
+		ctx := context.Background()
+		cacheKey := "vmallorder:taskPool:queue"
+		rdb.RPush(ctx, cacheKey, string(reqTmp))
+	}
+	fmt.Println(time.Now().Format("2006-01-02 15:04:05"))
 }
 
 // 有序集合写入
@@ -74,7 +131,7 @@ func GetSet() {
 
 }
 
-//slice去重
+// slice去重
 func removeRepByMap(slc []string) []string {
 	result := []string{}
 	tempMap := map[string]byte{}
@@ -92,7 +149,7 @@ func removeRepByMap(slc []string) []string {
 func lock() {
 
 	ctx := context.Background()
-	locker := NewRedisLocker(ctx, rdb, "equitygoods-crontab-writeofffailtry1", 1*time.Second)
+	locker := NewRedisLocker(ctx, rdb, "equitygoods-crontab-writeofffailtry1", 1*time.Hour)
 
 	b := locker.Lock()
 	fmt.Println(b)

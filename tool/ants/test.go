@@ -19,7 +19,7 @@ func t(c chan int) {
 
 }
 
-func main1() {
+func main11() {
 
 	size := 5
 	chanSlic := make([]chan int, size)

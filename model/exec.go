@@ -1,7 +1,6 @@
 package model
 
 import (
-	"context"
 	"fmt"
 	"github.com/spf13/cast"
 	"gorm.io/gorm"
@@ -14,34 +13,23 @@ func CreateTime(db *gorm.DB) *gorm.DB {
 
 func Exec() {
 
-	list := make([]ActivityData, 0)
-	err := db.WithContext(context.Background()).Table(ActivityData{}.TableName()).
-		Where("cid = ? ", 432492514382188544).Find(&list).Error
-	fmt.Println(err)
-	fmt.Println(list)
+	orderIds := make([]int64, 0)
+	db.Model(Tt{}).Where("id=1").Where("id=22").Pluck("id", &orderIds)
+	//s.Weight = 99998877.12123
+	//// 123123000
+	//db.Model(&s).Where("id=486954396925038592").Save(&s)
+	fmt.Println(len(orderIds))
 	return
+}
 
-	//t := VmallMemberPoint{Mobile: "123", ChannelId: "456"}
-	//err := db.Save(&t).Error
-	//fmt.Println(err)
-	//fmt.Println(t)
-	//errors.Is(err, gorm.d)
-	//
-	//return
+func Sum() {
 
-	tx := db.Model(VmallInterPointCheckIn{})
+	rec := &struct {
+		Snum int
+	}{}
 
-	data := VmallInterPointCheckIn{}
-	err = tx.First(&data).Error
-
-	// json_contains(limit_org_types,json_array("%s"))
-
-	fmt.Println(err)
-	//fmt.Println(data)
-	fmt.Printf("%#v", data)
-	//fmt.Printf("%#v", data.CheckInType[1])
-
-	return
+	db.Model(&WriteOffFail{}).Unscoped().Select("SUM(try_num) as snum").Where("id>1").Take(rec)
+	fmt.Println(rec)
 }
 
 // 获取单列多行

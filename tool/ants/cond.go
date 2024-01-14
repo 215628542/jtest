@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func main() {
+func main_c1() {
 	c := sync.NewCond(&sync.Mutex{})
 	var ready int
 

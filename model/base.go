@@ -9,7 +9,6 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
-	"log"
 	"time"
 )
 
@@ -26,17 +25,80 @@ func init() {
 	}
 
 	// 数据表迁移
-	if err := db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4").AutoMigrate(
-		VmallInterPointCheckIn{}, VmallInterPointCheckInLog{}, VmallPointJob{}, VmallPointJobLog{}, VmallMemberPointLog{},
-		VmallMember{}, VmallMemberPoint{}, Tt{},
-	); err != nil {
-		log.Println("表迁移失败：", err.Error())
-	}
+	//if err := db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4").AutoMigrate(
+	//	VmallInterPointCheckIn{}, VmallInterPointCheckInLog{}, VmallPointJob{}, VmallPointJobLog{}, VmallMemberPointLog{},
+	//	VmallMemberPoint{}, Tt{}, ActivityPushMessage{}, EquityStockAmountLog{}, EsVmallOrder{}, EsVmallOrderGoods{}, EquitySupplier{},
+	//); err != nil {
+	//	log.Println("表迁移失败：", err.Error())
+	//}
 
+}
+
+type EquitySupplier struct {
+	gorm.Model
+	Name                string            `gorm:"size:100; comment:供应商名称"`
+	Image               string            `gorm:"size:100; comment:logo"`
+	Introduction        string            `gorm:"type:text; comment:简介"`
+	ServiceTel          string            `gorm:"size:100; comment:客服电话"`
+	ManagerName         string            `gorm:"size:100; comment:负责人名字"`
+	ManagerMobile       string            `gorm:"size:100; comment:负责人手机"`
+	Attach              string            `gorm:"size:100; comment:内容用于将该供应商商品订单传到微信支付attach字段"`
+	Remark              string            `gorm:"size:100; comment:备注"`
+	ChannelID           string            `json:"channel_id" gorm:"not null;size:100;index"`
+	RuiyinxinMerchantID string            `json:"ruiyinxin_merchant_id" gorm:"size:100; comment:第三方商户号（瑞银信）"`
+	RuiyinxinChannel    string            `json:"ruiyinxin_channel" gorm:"size:100; comment:第三方通道（瑞银信）"`
+	WyfMerchantID       string            `json:"wyf_merchant_id" gorm:"not null;type:varchar(100);comment:微邮付商户号"`
+	NoWriteLimit        bool              `json:"no_write_limit" gorm:"not null;comment:放开限制(单商户核销每日限额)"`
+	OrgID               string            `json:"org_id" gorm:"size:100; comment:组织架构ID"`
+	CreateAdminID       string            `json:"create_admin_id" gorm:"not null;size:30; comment:创建的员工ID"`
+	AttachmentImg       string            `json:"attachment_img" gorm:"type:varchar(100); not null; comment:附件图片"`
+	ReviewStatus        uint32            `json:"review_status" gorm:"type:tinyint(4); not null; comment:审核状态：1-待确认 2-待审核 3-审核通过 4-审核不通过"`
+	AssistEvidenceImg   stringArrayStruct `json:"assist_evidence_img" gorm:"type:text; comments:附件证明图片"`
+	SignImg             string            `json:"sign_img" gorm:"type:varchar(200); not null; default:''; comments:签名图片"`
+	ShelvesStatus       uint32            `json:"shelves_status" gorm:"type:tinyint(4); not null; default:1; comment:上下架状态：1-上架 2-下架"`
+	BusinessType        int32             `json:"business_type" gorm:"type:tinyint(4); not null; default:0; comments:商户类型，1：企业；2：个体户；3：小微；4：其他；5：政府"`
 }
 
 func GetDb() *gorm.DB {
 	return db
+}
+
+type EquityStockAmountLog struct {
+	ID uint64 `json:"id" gorm:"primary_key;autoIncrement:false"`
+
+	OrgID    uint64 `json:"org_id" gorm:"index:idx_org_goods;comment:网点ID"`
+	GoodsID  uint64 `json:"goods_id" gorm:"index:idx_org_goods;comment:商品ID"`
+	Amount   int64  `json:"amount" gorm:"comment:库存数量"`
+	Method   string `json:"method" gorm:"type:varchar(100);comment:操作类型"`
+	Source   string `json:"source" gorm:"type:varchar(100);comment:来源"`
+	OrderNum string `json:"order_num" gorm:"type:varchar(50);default:'';comment:订单号"`
+
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type ActivityPushMessage struct {
+	Id         uint64    `json:"id" gorm:"primary_key;autoIncrement:false"`
+	ReceiveId  uint64    `json:"receive_id" gorm:"index;not null;comment:领取记录Id"`
+	Aid        uint64    `json:"aid" gorm:"index;not null;default:0;comment:活动id"`
+	UserId     string    `json:"user_id" gorm:"index;not null;size:50;comment:用户id"`
+	EventID    string    `json:"event_id" gorm:"not null;size:20;comment:事件Id"`
+	EventType  string    `json:"eventType" gorm:"not null;size:20;comment:事件Id"`
+	ActionId   string    `json:"actionid" gorm:"not null;size:100;comment:推送的活动参与流水号"`
+	MobileNo   string    `json:"mobile_no" gorm:"index;not null;size:50;comment:手机号"`
+	CstmName   string    `json:"cstm_name" gorm:"index;not null;size:50;comment:姓名"`
+	IdCard     string    `json:"id_card" gorm:"index;not null;size:50;comment:身份证"`
+	AwardSeq   string    `json:"award_seq" gorm:"not null;size:100;comment:推送的奖品流水号"`
+	AwardName  string    `json:"award_name" gorm:"not null;size:50;comment:奖品名称"`
+	AwardType  string    `json:"award_type" gorm:"not null;size:50;comment:奖品类型"`
+	DoneDateAt time.Time `json:"done_date_at" gorm:"not null;comment:领取时间"`
+	OrderBrch  string    `json:"order_brch" gorm:"not null;size:50;comment:机构号"`
+	Status     int8      `json:"status" gorm:"not null;comment:推送状态：1、成功，0、待推送，-1、失败"`
+	ErrMsg     string    `json:"err_msg" gorm:"not null;size:250;comment:推送失败原因"`
+	ReqData    string    `json:"req_data" gorm:"not null;type:text;comment:推送请求"`
+	ResData    string    `json:"res_data" gorm:"not null;type:text;comment:推送返回"`
+	CreatedAt  time.Time `json:"createdAt" gorm:"not null"`
+	UpdatedAt  time.Time `json:"updatedAt" gorm:"not null"`
 }
 
 type ActivityData struct {
@@ -91,7 +153,7 @@ type VmallMember struct {
 
 	Nickname string `json:"nickname" structs:"nickname" gorm:"not null;type:varchar(100);comment:用户昵称"`
 	Avatar   string `json:"avatar" structs:"avatar"  gorm:"not null;type:varchar(300);commemt:头像"`
-	Gendor   uint32 `json:"gendor" structs:"gendor" gorm:"not null;type:tinyint(2);comment:性别"`
+	Gendor   uint32 `json:"gendor" structs:"gendor" gorm:"not null;default:0;type:tinyint(2);comment:性别"`
 
 	Level uint64 `json:"level" structs:"level" gorm:"not null;comment:vmall_levels表的level字段值"`
 

@@ -15,7 +15,8 @@ var db *gorm.DB
 func init() {
 
 	var err error
-	dsn := "select:ZEsqk8J_8fZGx7Z@tcp(gz-tdsqlshard-1i3vlmv7.sql.tencentcdb.com:23750)/vmall?charset=utf8mb4&parseTime=True&loc=Local"
+	//dsn := "select:ZEsqk8J_8fZGx7Z@tcp(gz-tdsqlshard-1i3vlmv7.sql.tencentcdb.com:23750)/vmall?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := ""
 	db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Info),
 	})

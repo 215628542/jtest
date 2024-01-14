@@ -1,28 +1,37 @@
 package main
 
 import (
-	"github.com/shopspring/decimal"
-	"test/tool/redis"
+	"fmt"
+	"github.com/thoas/go-funk"
+	"time"
 )
 
-func SwitchPrice(price int64) float64 {
-	priceDec := decimal.NewFromInt(price)
-	num := decimal.NewFromInt(1)
-	dec := priceDec.Mul(num)
-	f, _ := dec.Float64()
-	return f
+// 切片合并
+var dealIds = func(combineIds *[]string, join *[]string) int {
+	if len(*combineIds) == 0 {
+		*combineIds = *join
+	} else {
+		*combineIds = funk.InnerJoinString(*combineIds, *join) // 取交集
+	}
+	return len(*combineIds)
 }
 
-func main2() {
+func main() {
+
+	f := time.Now().Format("2006-01-02")
+	fmt.Println(f)
+
+	return
+
+	//elasticSearch.Exec()
 
 	//antsTool.Test()
 	//asynqTool.Run()
 	//ants.Test()
 
-	//testmodel.Exec()
 	//fmt.Println("=======")
 	//model.Exec()
-	redis.Exec()
+	//redis.Exec()
 	//common.Differ()
 
 	// 瑞银信签名

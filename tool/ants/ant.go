@@ -42,7 +42,7 @@ func demoFunc(i int) func() {
 
 var wg sync.WaitGroup
 
-func main1212() {
+func main() {
 	defer ants.Release()
 
 	runTimes := 20
@@ -56,7 +56,7 @@ func main1212() {
 	fmt.Printf("running goroutines: %d\n", ants.Running())
 	fmt.Printf("finish all tasks.\n")
 
-	return
+	//return
 
 	// Use the pool with a function,
 	// set 10 to the capacity of goroutine pool and 1 second for expired duration.
