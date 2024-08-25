@@ -9,6 +9,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"log"
 	"time"
 )
 
@@ -24,14 +25,580 @@ func init() {
 		panic(err.Error())
 	}
 
-	// 数据表迁移
-	//if err := db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4").AutoMigrate(
-	//	VmallInterPointCheckIn{}, VmallInterPointCheckInLog{}, VmallPointJob{}, VmallPointJobLog{}, VmallMemberPointLog{},
-	//	VmallMemberPoint{}, Tt{}, ActivityPushMessage{}, EquityStockAmountLog{}, EsVmallOrder{}, EsVmallOrderGoods{}, EquitySupplier{},
-	//); err != nil {
-	//	log.Println("表迁移失败：", err.Error())
-	//}
+	sqlDB, _ := db.DB()
+	sqlDB.SetMaxOpenConns(1)                  // 最大打开连接数
+	sqlDB.SetMaxIdleConns(1)                  // 最大空闲连接数
+	sqlDB.SetConnMaxLifetime(1 * time.Second) // 连接最大生命周期
 
+	// 数据表迁移
+	if err := db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4").AutoMigrate(
+		EquityGoodsActPushRecord{}, RankSetting{}, ActivityBonusRank{}, SyhIssue{}, SyhActivityUser{}, SyhActivityReceive{}, SyhActivityTask{}, SyhActivity{}, WxMiniExtend{}, Activity{}, ActivityBonus{}, KycInfo{}, ApiLog{}, VmallMemberRelation{}, VmallMemberRelationExtand{}, VmallMemberRelationExtandLog{}, VmallMember{},
+	); err != nil {
+		log.Println("表迁移失败：", err.Error())
+	}
+}
+
+type EquityGoodsActPushRecord struct {
+	Id uint64 `json:"id" gorm:"primary_key;autoIncrement:false"`
+
+	ReqData  string `json:"req_data" gorm:"not null;type:text;comment:请求信息"`
+	RespData string `json:"resp_data" gorm:"not null;type:text;comment:响应信息"`
+	ErrMsg   string `json:"err_msg" gorm:"not null;type:text;comment:异常信息"`
+	Status   string `json:"status" gorm:"not null;type:varchar(50);default:'';comment:响应状态 success:成功 fail:失败"`
+	Type     string `json:"type" gorm:"not null;size:50;comment:三方接口"`
+
+	GoodsId       string `json:"goods_id" structs:"source" gorm:"not null;type:varchar(50);default:'';comment:商品id;"`
+	EquityGoodsId string `json:"equity_goods_id" structs:"source" gorm:"not null;type:varchar(50);default:'';comment:云仓商品id;"`
+	OrderNum      string `json:"order_num" structs:"source" gorm:"not null;type:varchar(50);default:'';comment:订单号;"`
+	Source        string `json:"source" structs:"source" gorm:"not null;type:varchar(50);default:'';comment:来源;"`
+	SourceId      string `json:"source_id" structs:"source_id" gorm:"not null;type:varchar(50);default:'';comment:来源id;"`
+
+	CreatedAt time.Time `json:"createdAt" gorm:"index:idx_created_at;not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+}
+
+type ActivityBonusRank struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	MemberId        uint64 `json:"member_id" gorm:"not null;type:bigint(20);default:0;comment:会员id"`
+	PromoActivityId uint64 `json:"promo_activity_id" gorm:"not null;type:bigint(20);default:0;comment:推广活动id"`
+	PromoMemberId   uint64 `json:"promo_member_id" gorm:"not null;type:bigint(20);default:0;comment:推广会员ID"`
+	PromoNum        int32  `json:"promo_num" gorm:"not null;type:int(11);default:0;comment:推广拉新人数"`
+	Point           int32  `json:"point" gorm:"not null;type:int(11);default:0;comment:奖励积分"`
+	Rank            int32  `json:"rank" gorm:"not null;type:int(11);default:0;comment:排行"`
+
+	RankSettingId        uint64 `json:"rank_setting_id" gorm:"not null;type:bigint(20);default:0;comment:rank_setting表id"`
+	PromoMemberMobileEnc string `json:"promo_member_mobile_enc" gorm:"not null;type:varchar(100);default:'';comment:推广会员手机"`
+	//MerchantNum          string `json:"merchant_num" gorm:"not null;type:varchar(100);default:'';comment:商户号"`
+	//MerchantName         string `json:"merchant_name" gorm:"not null;type:varchar(100);default:'';comment:商户名称"`
+	//MerchantCategoryName string `json:"merchant_category_name" gorm:"not null;type:varchar(300);default:'';comment:商户分类名称"`
+
+	//Bonus  int64  `json:"bonus" gorm:"not null;type:int(11);default:0;comment:奖励积分值"`
+	Status string `json:"status" gorm:"not null;type:varchar(30);default:'';comment:派发奖励状态 待派发:pending 派发成功:success 派发失败:fail"`
+	ErrMsg string `json:"err_msg" gorm:"not null;type:varchar(1000);default:'';comment:错误信息"`
+
+	//ChannelId string `json:"channel_id" structs:"channel_id" gorm:"not null;type:varchar(50);default:'';comment:渠道ID;"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type RankSetting struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	PromoActivityId uint64 `json:"promo_activity_id" gorm:"not null;type:bigint(20);default:0;comment:推广活动id"`
+	Name            string `json:"name" gorm:"not null;type:varchar(200);default:'';comment:排行名称"`
+	Rule            string `json:"rule" gorm:"type:text;comments:排行奖励规则"`
+	PromoNum        int32  `json:"promo_num" gorm:"not null;type:int(11);default:0;comment:引流人数"`
+	BonusCycle      string `json:"bonus_cycle" gorm:"not null;type:varchar(100);default:'';comment:排行奖励周期"`
+	TopImage        string `json:"top_image" gorm:"not null;type:varchar(2000);default:'';comment:顶部图片"`
+
+	EffectiveDate time.Time `json:"effective_date" gorm:"not null;comment:生效时间"`
+	IsShow        bool      `json:"is_show" gorm:"not null;type:int(2);default:0;comment:是否展示"`
+	Sort          int32     `json:"sort" gorm:"not null;type:bigint(20);default:0;comment:排序"`
+	Status        bool      `json:"status" gorm:"not null;type:int(2);default:0;comment:状态"`
+
+	StaffId string `json:"staff_id" gorm:"not null;type:varchar(100);default:'';comment:员工id"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type ProjectDataPushRecord struct {
+	Id        uint64 `json:"id" gorm:"primaryKey;autoIncrement:false"`
+	ChannelId string `json:"channel_id" structs:"channel_id" gorm:"not null;type:varchar(50);default:'';comment:渠道ID;"`
+
+	Params   string `json:"params" gorm:"not null;type:text;comment:请求参数"`
+	ReqData  string `json:"req_data" gorm:"not null;type:text;comment:接口请求参数"`
+	RespData string `json:"resp_data" gorm:"not null;type:text;comment:接口响应参数"`
+
+	Type   string `json:"type" structs:"type" gorm:"not null;type:varchar(100);default:'';comment:类型;"`
+	Status string `json:"status" structs:"status" gorm:"not null;type:varchar(30);default:'';comment:状态;"`
+	ErrMsg string `json:"err_msg" gorm:"not null;type:text;comment:错误信息"`
+
+	Source   string `json:"source" structs:"source" gorm:"not null;type:varchar(50);default:'';comment:来源;"`
+	SourceId string `json:"source_id" structs:"source_id" gorm:"not null;type:varchar(50);default:'';comment:来源id;"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+}
+
+type ActivityBonus struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	PromoActivityId uint64 `json:"promo_activity_id" gorm:"not null;type:bigint(20);default:0;comment:推广活动id"`
+	MemberType      int32  `json:"member_type" gorm:"not null;type:tinyint(2);default:0;comment:会员类型 1:新拓客户 2:存量客户"`
+	PromoType       string `json:"promo_type" gorm:"not null;type:varchar(30);default:'';comment:推广类型 会员：member 商户：merchant"`
+	PromoBonusType  string `json:"promo_bonus_type" gorm:"not null;type:varchar(30);default:'';comment:推广奖励类型 参与奖励:join 核销奖励:writeoff"`
+	MemberId        uint64 `json:"member_id" gorm:"not null;type:bigint(20);default:0;comment:会员id"`
+
+	JoinMemberId        uint64 `json:"join_member_id" gorm:"not null;type:bigint(20);default:0;comment:参与会员ID"`
+	JoinMemberMobileEnc string `json:"join_member_mobile_enc" gorm:"not null;type:varchar(100);default:'';comment:参与会员手机"`
+	OrgId               string `json:"org_id" gorm:"not null;type:varchar(100);default:'';comment:关联商户所属机构、会员所属机构，用promo_type区分"`
+
+	PromoMemberId        uint64 `json:"promo_member_id" gorm:"not null;type:bigint(20);default:0;comment:推广会员ID"`
+	PromoMemberMobileEnc string `json:"promo_member_mobile_enc" gorm:"not null;type:varchar(100);default:'';comment:推广会员手机"`
+	RelationMerchantNum  string `json:"relation_merchant_num" gorm:"not null;type:varchar(100);default:'';comment:关联商户号"`
+	RelationMerchantName string `json:"relation_merchant_name" gorm:"not null;type:varchar(100);default:'';comment:关联商户名称"`
+
+	//RelationMerchantOrgId string `json:"relation_merchant_org_id" gorm:"not null;type:varchar(100);default:'';comment:关联商户所属机构"`
+
+	Source       string `json:"source" gorm:"not null;type:varchar(100);default:'';comment:来源"`
+	ActivityId   string `json:"activity_id" gorm:"not null;type:varchar(50);default:'';comment:活动id"`
+	ActivityName string `json:"activity_name" gorm:"not null;type:varchar(100);default:'';comment:活动名称"`
+	ReceiveId    string `json:"receive_id" gorm:"not null;type:varchar(50);default:'';comment:领取id"`
+	ErrMsg       string `json:"err_msg" gorm:"not null;type:varchar(1000);default:'';comment:错误信息"`
+	ErrCode      int32  `json:"err_code" gorm:"not null;type:int(11);default:0;comment:错误码"`
+
+	Bonus  int64  `json:"bonus" gorm:"not null;type:int(11);default:0;comment:奖励积分值"`
+	Status string `json:"status" gorm:"not null;type:varchar(30);default:'';comment:派发奖励状态 待派发:pending 派发成功:success 派发失败:fail"`
+
+	BonusAt          time.Time `json:"bonus_at" gorm:"not null;comment:奖励时间;"`
+	JoinActivityDate time.Time `json:"join_activity_date" gorm:"not null;comment:参与活动时间;"`
+	WriteoffDate     time.Time `json:"writeoff_date" gorm:"not null;comment:核销时间;"`
+	RegisterDate     time.Time `json:"register_date" gorm:"not null;comment:注册时间;"`
+	ChannelId        string    `json:"channel_id" structs:"channel_id" gorm:"not null;type:varchar(50);default:'';comment:渠道ID;"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type Operator struct {
+	IsSuper       bool      `json:"isSuper" gorm:"not null;comment:操作员是否为超管"`
+	AdminId       string    `json:"adminId" gorm:"not null;size:50;comment:操作员id"`
+	MobileDim     string    `json:"mobileDim" gorm:"not null;size:30;comment:操作员手机号"`
+	MobileEncrypt string    `json:"mobileEncrypt" gorm:"not null;size:30;comment:操作员手机号"`
+	Name          string    `json:"name" gorm:"not null;size:200;comment:操作员名"`
+	NameEncrypt   string    `json:"nameEncrypt" gorm:"not null;size:200;comment:操作员名"`
+	AdminOrgId    string    `json:"adminOrgId" gorm:"not null;size:50;comment:操作员所属组织架构id"`
+	OperatedAt    time.Time `json:"operatedAt" gorm:"not null;comment:操作时间"`
+}
+
+type SyhIssue struct {
+	Id    uint64 `json:"id" gorm:"primary_key;auto_increment:false"`
+	ActId uint64 `json:"act_id" gorm:"index;not null;comment:活动ID"`
+	Operator
+
+	TaskIds   GormStrSlice `json:"task_ids" gorm:"type:text;comment:派发任务id"`
+	Uid       string       `json:"uid" gorm:"not null;size:50;comment:使用的用户id"`
+	CreatedAt time.Time    `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time    `json:"updated_at" gorm:"not null"`
+	DeletedAt time.Time    `json:"deleted_at" gorm:"not null"`
+}
+
+type SyhActivityUser struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	Aid        uint64       `json:"aid" gorm:"index;not null;index:idx_actId_uid,priority:1;comment:活动id"`
+	AuthPrizes GormStrSlice `json:"auth_prizes" gorm:"not null;type:text;comment:授权的奖品任务"`
+
+	Uid         string `json:"uid" gorm:"index;not null;size:50;index:idx_actId_uid,priority:2;comment:用户id"`
+	RealnameDim string `json:"realname_dim" gorm:"not null;size:50;comment:用户姓名(带*号)"`
+	RealnameEnc string `json:"realname_enc" gorm:"not null;size:70;comment:用户姓名(加密)"`
+	MobileDim   string `json:"mobile_dim" gorm:"not null;size:50;comment:用户手机号(带*号)"`
+	MobileEnc   string `json:"mobile_enc" gorm:"index;not null;size:70;comment:用户手机号(加密)"`
+	IdcodeDim   string `json:"idcode_dim" gorm:"not null;size:70;comment:身份证(带*号)"`
+	IdcodeEnc   string `json:"idcode_enc" gorm:"not null;size:100;comment:身份证(加密)"`
+	Openid      string `json:"openid" gorm:"not null;size:50;comment:用户openid"`
+	Appid       string `json:"appid" gorm:"not null;size:50;comment:领取的appid"`
+
+	//MemberCreatedAt time.Time `json:"member_created_at" gorm:"not null;comment:会员入会时间"`
+	//GenerateCodeAt time.Time `json:"generate_code_at" gorm:"not null;comment:生成码的时间"`
+
+	StaffId        string `json:"staff_id" gorm:"index;not null;size:50;comment:员工id"`
+	StaffOrg       string `json:"staff_org" gorm:"not null;size:50;comment:员工当时的网点"`
+	StaffMobileDim string `json:"staff_mobile_dim" gorm:"not null;size:50;comment:员工手机号(带*号)"`
+	StaffMobileEnc string `json:"staff_mobile_enc" gorm:"index;not null;size:70;comment:员工手机号(加密)"`
+
+	ChannelId string `json:"channel_id" gorm:"index;not null;size:50;comment:渠道id"`
+
+	DeletedAt time.Time `json:"deleted_at" structs:"deleted_at" gorm:"not null;index:idx_actId_uid,priority:3;"`
+	CreatedAt time.Time `json:"created_at" structs:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" structs:"updated_at" gorm:"not null"`
+}
+
+type SyhActivityReceive struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	MemberId    uint64 `json:"member_id" gorm:"not null;type:bigint(20);default:0;comment:会员id"`
+	RealnameEnc string `json:"realname_enc" gorm:"not null;type:varchar(100);default:'';comment:客户姓名"`
+	MobileEnc   string `json:"mobile_enc" gorm:"not null;type:varchar(100);default:'';comment:客户手机号码"`
+
+	ActivityId    uint64 `json:"activity_id" gorm:"not null;type:bigint(20);default:0;comment:通关活动id"`
+	TaskId        uint64 `json:"task_id" gorm:"not null;type:bigint(20);default:0;comment:任务id"`
+	TaskType      string `json:"task_type" gorm:"not null;type:varchar(100);default:'';comment:任务类型"`
+	BonusNum      int32  `json:"bonus_num" gorm:"not null;type:tinyint(2);default:0;comment:完成任务奖励抽奖次数"`
+	ReceiveSource string `json:"receive_source" gorm:"not null;type:varchar(100);default:'';comment:领取来源"`
+
+	StaffId        string `json:"staff_id" gorm:"not null;type:varchar(100);default:'';comment:员工id"`
+	StaffNameEnc   string `json:"staff_name_enc" gorm:"not null;type:varchar(100);default:'';comment:员工名称"`
+	StaffOrgId     string `json:"staff_org_id" gorm:"not null;type:varchar(100);default:'';comment:员工机构id"`
+	StaffMobileEnc string `json:"staff_mobile_enc" gorm:"not null;type:varchar(100);default:'';comment:员工手机号码"`
+
+	ReceiveStatus string    `json:"receive_status" gorm:"not null;type:varchar(100);default:'';comment:领取状态"`
+	ReceiveAt     time.Time `json:"receive_at" gorm:"not null;comment:领取时间"`
+	VerifyDate    time.Time `json:"verify_date" gorm:"not null;comment:验证时间"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type SyhActivityTask struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	Name          string `json:"name" gorm:"not null;type:varchar(300);default:'';comment:任务名称"`
+	ActivityId    uint64 `json:"activity_id" gorm:"not null;type:bigint(20);default:0;comment:通关活动id"`
+	TaskType      string `json:"task_type" gorm:"not null;type:varchar(300);default:'';comment:任务类型"`
+	BonusNum      int32  `json:"bonus_num" gorm:"not null;type:tinyint(2);default:0;comment:完成任务奖励抽奖次数"`
+	IsShare       bool   `json:"is_share" gorm:"not null;type:int(2);default:0;comment:是否允许分享"`
+	IsStaffUnlock bool   `json:"is_staff_unlock" gorm:"not null;type:int(2);default:0;comment:启用员工端解锁"`
+
+	UnFinishTips    string `json:"un_finish_tips" gorm:"not null;type:varchar(500);default:'';comment:未办理业务提示语"`
+	ExplainLink     string `json:"explain_link" gorm:"not null;type:varchar(500);default:'';comment:业务介绍链接"`
+	UnFinishImageId string `json:"un_finish_image_id" gorm:"not null;type:varchar(500);default:'';comment:任务已完成图片"`
+	FinishImageId   string `json:"finish_image_id" gorm:"not null;type:varchar(500);default:'';comment:任务未完成图片"`
+
+	Status bool  `json:"status" gorm:"not null;type:int(2);default:1;comment:状态"`
+	Sort   int32 `json:"sort" gorm:"not null;type:int(11);default:0;comment:排序"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type SyhActivity struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	Name               string    `json:"name" gorm:"not null;type:varchar(300);default:'';comment:活动名称"`
+	OrgId              string    `json:"org_id" gorm:"not null;type:varchar(100);default:'';comment:所属机构id"`
+	StartDate          time.Time `json:"start_date" gorm:"not null;comment:活动开始时间"`
+	EndDate            time.Time `json:"end_date" gorm:"not null;comment:活动结束时间"`
+	RelationActivityId string    `json:"relation_activity_id" gorm:"not null;type:varchar(500);default:'';comment:关联活动ID"`
+	Rule               string    `json:"rule" gorm:"type:text;comments:活动规则"`
+	VerifyDate         time.Time `json:"start_date" gorm:"not null;comment:验证时间"`
+
+	IsShare      bool   `json:"is_share" gorm:"not null;type:int(2);default:0;comment:是否允许分享"`
+	ShareImageId string `json:"share_image_id" gorm:"not null;type:varchar(300);default:'';comment:分享图"`
+	ShareTitle   string `json:"share_title" gorm:"not null;type:varchar(500);default:'';comment:分享标题"`
+
+	BgImageId      string `json:"bg_image_id" gorm:"not null;type:varchar(300);default:'';comment:背景图片"`
+	GridImageId    string `json:"grid_image_id" gorm:"not null;type:varchar(300);default:'';comment:宫格图"`
+	PosterImageId  string `json:"poster_image_id" gorm:"not null;type:varchar(300);default:'';comment:海报图"`
+	NotTaskImageId string `json:"not_task_image_id" gorm:"not null;type:varchar(300);default:'';comment:无任务格图"`
+
+	Status    bool   `json:"status" gorm:"not null;type:int(2);default:1;comment:状态"`
+	ChannelId string `json:"channel_id" structs:"channel_id" gorm:"not null;type:varchar(50);default:'';comment:渠道ID;"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type VmallInterPointCheckInLog struct {
+	Id        int64  `json:"id" gorm:"primary_key;autoIncrement:false"`
+	ActId     uint64 `json:"act_id,omitempty" gorm:"column:act_id;type:int(11);default:0;comment:'任务id'"`
+	Uid       uint64 `json:"uid,omitempty" gorm:"column:uid;default:0;comment:'用户id'"`
+	Point     int64  `json:"point,omitempty" gorm:"column:point;type:int(11);default:0;comment:'领取积分数'"`
+	PointType string `json:"point_type" gorm:"column:point_type;type:varchar(50);default:'';comment:'积分类型'"`
+
+	CreatedAt time.Time `gorm:"column:created_at;default:NULL;comment:'创建时间'"`
+	UpdatedAt time.Time `gorm:"column:updated_at;default:NULL;comment:'更新时间'"`
+	DeletedAt time.Time `gorm:"column:deleted_at;default:NULL;comment:'删除时间'"`
+}
+
+type VmallInterPointCheckIn struct {
+	Id uint64 `json:"id" gorm:"column:id;primary_key;AUTO_INCREMENT;NOT NULL"`
+	//SubIds      db.StringArrayStruct `json:"sub_ids" gorm:"column:sub_ids;type:text;comment:'所属分站'"`
+	CheckInType string `json:"check_in_type" gorm:"column:check_in_type;type:varchar(100);default:'';comment:'签到类型'"`
+	//CycleValue  db.StringArrayStruct `json:"cycle_value" gorm:"column:cycle_value;type:text;default:'';comment:'周期对应积分数值'"`
+	Cycle      int32 `json:"cycle" gorm:"column:cycle;type:int(11);default:0;comment:'签到周期'"`
+	Status     int32 `json:"status" gorm:"column:status;type:int(11);default:0;comment:'状态  0：关闭 1:开启'"`
+	RepCheckIn bool  `json:"rep_check_in" gorm:"column:rep_check_in;type:int(11);default:0;comment:'中断签到是否重签'"`
+
+	PointType string `json:"point_type" gorm:"column:point_type;type:varchar(50);default:'';comment:'积分类型'"`
+	SubType   string `json:"sub_type" gorm:"column:sub_type;type:varchar(50);default:'';comment:'分站应用范围'"`
+
+	CreatedAt time.Time `gorm:"column:created_at;default:NULL;comment:'创建时间'"`
+	UpdatedAt time.Time `gorm:"column:updated_at;default:NULL;comment:'更新时间'"`
+	DeletedAt time.Time `gorm:"column:deleted_at;default:NULL;comment:'删除时间'"`
+}
+
+type WxMiniExtend struct {
+	gorm.Model
+
+	ID                    uint   `gorm:"primarykey;autoIncrement:false"`
+	MiniID                uint   `gorm:"column:mini_id;index:index_wme_miniid;not null;comment:wx_minis表的主键ID"`
+	ChannelID             string `gorm:"column:channel_id;type:varchar(50);comment:渠道ID"`
+	IssueMchID            string `gorm:"column:issue_mchid;type:varchar(50);comment:发券方商户ID"`
+	PayMchID              string `gorm:"column:pay_mchid;type:varchar(50);comment:企业付款商户ID"`
+	RecMchID              string `gorm:"column:rec_mchid;type:varchar(50);comment:企业收款商品ID"`
+	BindcardMchID         string `gorm:"column:bindcard_mchid;type:varchar(50);comment:绑卡验卡商户号"`
+	RegisterMemberType    uint32 `json:"register_member" gorm:"not null;type:tinyint(1);comment:是否开启会员注册 0关闭 1开启"`
+	MemberTypeCode        string `json:"member_type_id" gorm:"not null;type:varchar(50);comment:会员注册对应的会员类型编码"`
+	RegisterSuccessTip    string `json:"register_success_tip" gorm:"not null;type:varchar(200);comment:注册成功提示"`
+	OfficalAccountLink    string `json:"offical_account_link" gorm:"not null;type:varchar(200);comment:公众号链接"`
+	UserServicesAgreement string `json:"user_services_agreement" gorm:"not null;type:text;comment:用户服务协议"`
+	UserPrivacyPolicy     string `json:"user_privacy_policy" gorm:"not null;type:text;comment:用户隐私条例"`
+	ActReceiveMchId       string `json:"act_receive_mch_id" gorm:"not null;type:varchar(50);comment:活动收款商户号"`
+	DigitalMchNo          string `json:"digital_mch_no" gorm:"not null;type:varchar(50);comment:数币商户号"`
+
+	RegisterInfo  GormStrSlice `json:"register_info" gorm:"not null;type:json;comment:小程序注册必填字段"`
+	TitleBarColor string       `json:"title_bar_color" gorm:"not null;type:varchar(50);comment:标题栏颜色"`
+	TitleBarText  string       `json:"title_bar_text" gorm:"not null;type:varchar(100);comment:标题栏标题文本"`
+	BgImgId       string       `json:"bg_img_id" gorm:"not null;type:varchar(100);comment:背景图"`
+	NeedPushThird bool         `json:"need_push_third" gorm:"not null;comment:是否推送三方接口"`
+	BindInfoTip   string       `json:"bind_info_tip" gorm:"not null;type:varchar(200);comment:绑定信息提示语"`
+	LoginTip      string       `json:"login_tip" gorm:"not null;type:varchar(200);comment:登录提示语"`
+
+	OrderAutoReceive    bool   `json:"order_auto_receive" gorm:"not null;comment:是否开启自动收货"`
+	OrderAutoReceiveDay uint32 `json:"order_auto_receive_day" gorm:"not null;comment:自动收货的天数"`
+
+	ExtUrl string `json:"ext_url" gorm:"not null;size:200;comment:客服链接"`
+	CorpId string `json:"corp_id" gorm:"not null;size:50;comment:企业id"`
+
+	IndexBannerImgId string `json:"index_banner_img_id" gorm:"not null;size:50;comment:首页banner图id"`
+
+	SupportOnePointBuy bool   `json:"support_one_point_buy" gorm:"not null;comment:员工端是否支持创建一分购类型代销商品"`
+	OfficialAppId      string `json:"official_app_id" gorm:"not null;size:50;comment:公众号appid"`
+	OfficialAppSecret  string `json:"official_app_secret" gorm:"not null;size:100;comment:公众号appsecret"`
+
+	AliMchNo                  string `json:"ali_mch_no" gorm:"column:ali_mch_no;not null;type:varchar(100);default:'';comment:支付宝商户号"`
+	RedBagSendUserDayLimitWx  uint64 `json:"red_bag_send_user_day_limit_wx" gorm:"column:red_bag_send_user_day_limit_wx;not null;type:varchar(100);default:0;comment:红包单用户每天派发限额-微信"`
+	RedBagSendUserDayLimitAli uint64 `json:"red_bag_send_user_day_limit_ali" gorm:"column:red_bag_send_user_day_limit_ali;not null;type:varchar(100);default:0;comment:红包单用户每天派发限额-支付宝"`
+
+	SupplierAdmissionTerms string `json:"supplier_admission_terms" gorm:"type:text;comment:供应商入驻条款"`
+
+	HomeIrregularImgId   string `json:"home_irregular_img_id" gorm:"not null;type:varchar(100);default:'';comment:用户端小程序首页异形图片id"`
+	HomeIrregularBgColor string `json:"home_irregular_bg_color" gorm:"not null;type:varchar(100);default:'';comment:用户端小程序首页异形图片背景颜色"`
+
+	IsOpenStaffRegisterCode bool         `json:"is_open_staff_register_code" gorm:"column:is_open_staff_register_code;not null;type:tinyint(1);default:0;comment:是否开启员工端注册码入会附表"`
+	UserkOrgIds             GormStrSlice `json:"userk_org_ids" gorm:"not null;type:json;comment:首K适用机构"`
+	MemberTags              GormStrSlice `json:"member_tags" gorm:"not null;type:json;comment:附表已完成用户标签"`
+	UserkEquityBagId        string       `json:"userk_equity_bag_id" gorm:"column:userk_equity_bag_id;not null;type:varchar(300);default:'';comment:首K关联权益礼包ID"`
+	UserkJumpType           string       `json:"userk_jump_type" gorm:"column:userk_jump_type;not null;type:varchar(500);default:'';comment:商户KYC受用机构"`
+	UserkRecipientOrgIds    GormStrSlice `json:"userk_recipient_org_ids" gorm:"not null;type:json;comment:商户KYC填写后跳转链接类型"`
+}
+
+type Activity struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	Name               string    `json:"name" gorm:"not null;type:varchar(300);default:'';comment:活动名称"`
+	OrgId              string    `json:"org_id" gorm:"not null;type:varchar(100);default:'';comment:所属机构"`
+	StartDate          time.Time `json:"start_date" gorm:"not null;comment:活动开始时间"`
+	EndDate            time.Time `json:"end_date" gorm:"not null;comment:活动结束时间"`
+	AdImage            string    `json:"ad_image" gorm:"type:text;comments:广告图"`
+	ActivityType       int32     `json:"activity_type" gorm:"not null;type:tinyint(2);default:0;comment:活动类型 1:注册类 2:活动类"`
+	Sort               int32     `json:"sort" gorm:"not null;type:int(11);default:0;comment:排序"`
+	DistanceConstraint int32     `json:"distance_constraint" gorm:"not null;type:int(11);default:0;comment:距离约束（米）"`
+
+	RegisterBonus             int64 `json:"register_bonus" gorm:"not null;type:int(11);default:0;comment:新拓客户注册奖励积分（选注册类时出现该选项必选）"`
+	EligibleUserRegisterBonus int64 `json:"eligible_user_register_bonus" gorm:"not null;type:int(11);default:0;comment:存量客户注册奖励积分（选注册类时出现该选项必选）"`
+	NewRegister30DayBonus     int64 `json:"new_register_30_day_bonus" gorm:"not null;type:int(11);default:0;comment:30天内新开户奖励积分（选注册类或活动类时都出现该选项非必选）"`
+
+	NotEligibleUserJoinBonus int64 `json:"not_eligible_user_join_bonus" gorm:"not null;type:int(11);default:0;comment:新拓客户参与奖励积分（选活动类时出现该选项必选）"`
+	EligibleUserJoinBonus    int64 `json:"eligible_user_join_bonus" gorm:"not null;type:int(11);default:0;comment:存量客户参与奖励积分（选活动类时出现该选项必选）"`
+
+	NotEligibleUserWriteoffBonus int64 `json:"not_eligible_user_writeoff_bonus" gorm:"not null;type:int(11);default:0;comment:新拓客户核销奖励积分（选活动类时出现该选项非必选）"`
+
+	ActivityLink     string `json:"activity_link" gorm:"not null;type:varchar(300);default:'';comment:活动链接"`
+	PromoCrowds      string `json:"promo_crowds" gorm:"not null;type:varchar(300);default:'';comments:可推广人群 商户:merchant 会员:member"`
+	RelationMerchant int32  `json:"relation_merchant" gorm:"not null;type:tinyint(2);default:1;comment:关联商户 1:全量推广商户 2:单独关联商户"`
+	Status           int32  `json:"status" gorm:"not null;type:tinyint(2);default:1;comment:1:开启 2:关闭"`
+
+	StaffId    string `json:"staff_id" gorm:"not null;type:varchar(100);default:'';comment:员工id"`
+	StaffOrgId string `json:"staff_org_id" gorm:"not null;type:varchar(100);default:'';comment:员工组织架构id"`
+	ChannelId  string `json:"channel_id" structs:"channel_id" gorm:"not null;type:varchar(50);default:'';comment:渠道ID;"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type KycInfo struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	StaffId    string `json:"staff_id" gorm:"not null;type:varchar(100);default:'';comment:员工id"`
+	StaffOrgId string `json:"staff_org_id" gorm:"not null;type:varchar(100);default:'';comment:员工组织架构id"`
+	ChannelId  string `json:"channel_id" structs:"channel_id" gorm:"not null;type:varchar(50);default:'';comment:渠道ID;"`
+
+	ProjectName             string `json:"project_name" gorm:"not null;type:varchar(100);default:'';comment:项目名称"`
+	ProjectManagerMobileEnc string `json:"project_manager_mobile_enc" gorm:"not null;type:varchar(100);default:'';comment:项目负责人姓名手机号(加密)"`
+	ProjectManagerNameEnc   string `json:"project_manager_name_enc" gorm:"not null;type:varchar(100);default:'';comment:项目负责人姓名(加密)"`
+	ManagerOrgId            string `json:"manager_org_id" gorm:"not null;type:varchar(300);default:'';comment:项目负责人组织架构"`
+	DetailAddress           string `json:"detail_address" gorm:"not null;type:varchar(300);default:'';comment:详细地址"`
+	ProjectAddress          string `json:"project_address" gorm:"not null;type:varchar(300);default:'';comment:项目地址"`
+	DetailAddressLongitude  string `json:"detail_address_longitude" gorm:"not null;type:varchar(100);default:'';comment:详细地址经度"`
+	DetailAddressLatitude   string `json:"detail_address_latitude" gorm:"not null;type:varchar(100);default:'';comment:详细地址纬度"`
+
+	ManagementUnit     string `json:"management_unit" gorm:"not null;type:varchar(100);default:'';comment:管理方单位"`
+	KycType            string `json:"kyc_type" gorm:"not null;type:varchar(100);default:'';comment:行业类型"`
+	TransactionSize    string `json:"transaction_size" gorm:"not null;type:varchar(100);default:'';comment:交易规模"`
+	MerchantNum        int32  `json:"merchant_num" gorm:"not null;type:int(11);default:0;comment:商户数"`
+	IsHasIndustryChain bool   `json:"is_has_industry_chain" gorm:"not null;type:int(2);default:0;comment:是否有产业链"`
+	UpMerchantType     string `json:"transaction_size" gorm:"not null;type:varchar(100);default:'';comment:上游商户类型"`
+	UpMerchantOrg      string `json:"transaction_size" gorm:"not null;type:varchar(100);default:'';comment:上游商户分布区域"`
+	DownMerchantType   string `json:"transaction_size" gorm:"not null;type:varchar(100);default:'';comment:下游商户类型"`
+	DownMerchantOrg    string `json:"transaction_size" gorm:"not null;type:varchar(100);default:'';comment:下游商户分布区域"`
+
+	PaymentTool     string `json:"payment_tool" gorm:"not null;type:varchar(100);default:'';comment:支付工具"`
+	CooperativeBank string `json:"cooperative_bank" gorm:"not null;type:varchar(100);default:'';comment:合作银行"`
+	FinancialNeeds  string `json:"financial_needs" gorm:"not null;type:varchar(100);default:'';comment:金融需求"`
+	FinancialMs     string `json:"financial_ms" gorm:"not null;type:varchar(100);default:'';comment:主要财务管理系统"`
+
+	OrgId              stringArrayStruct `json:"images" gorm:"type:text; comments:归口网点"`
+	TeamManagerNameEnc string            `json:"team_manager_name_enc" gorm:"not null;type:varchar(100);default:'';comment:开发团队负责人"`
+	TeamMembers        string            `json:"team_members" gorm:"not null;type:varchar(300);default:'';comment:开发团队成员"`
+
+	// 项目跟进信息
+	ClockInLongitude    string            `json:"clock_in_longitude" gorm:"not null;type:varchar(100);default:'';comment:打卡经度"`
+	ClockInLatitude     string            `json:"clock_in_latitude" gorm:"not null;type:varchar(300);default:'';comment:打卡纬度"`
+	ClockInAddress      string            `json:"clock_in_address" gorm:"not null;type:varchar(300);default:'';comment:打卡位置"`
+	IsOpenClockIn       bool              `json:"is_open_clock_in" gorm:"not null;type:int(2);default:0;comment:是否开启打卡位置"`
+	ProjectFollowDesc   string            `json:"project_follow_desc" gorm:"not null;type:varchar(1000);default:'';comment:项目跟进描述"`
+	ProjectFollowDate   time.Time         `json:"created_at" gorm:"not null;comment:项目跟进日期"`
+	ProjectFollowImages stringArrayStruct `json:"project_follow_images" gorm:"type:text;comments:目跟进图片"`
+
+	CreatedAt time.Time `json:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type ApiLog struct {
+	Id             uint64 `json:"id" gorm:"primary_key;autoIncrement:false"`
+	Param          string `json:"param" gorm:"not null;type:text;comment:服务请求参数"`
+	ReqData        string `json:"req_data" gorm:"not null;type:text;comment:请求信息"`
+	RespData       string `json:"resp_data" gorm:"not null;type:text;comment:响应信息"`
+	OriginRespData string `json:"origin_resp_data" gorm:"not null;type:text;comment:原始响应信息"`
+
+	ErrMsg     string `json:"err_msg" gorm:"not null;type:text;comment:异常信息"`
+	StatusCode string `json:"status_code" gorm:"not null;default:'';comment:响应状态码 00为验证成功，01客户信息验证失败，99为传入参数不合法"`
+
+	Unionid   string `json:"unionid" gorm:"not null;size:100;default:'';comment:unionid"`
+	MobileEnc string `json:"mobile_enc" gorm:"not null;size:150;default:'';comment:加密手机号码"`
+
+	Source    string `json:"source" gorm:"not null;index:idx_source;size:100;default:'';comment:来源"`
+	ServiceId string `json:"service_id" gorm:"not null;size:50;default:'';comment:接口服务id"`
+	ChannelId string `json:"channel_id" gorm:"not null;size:50;default:'';comment:渠道ID"`
+
+	CreatedAt time.Time `gorm:"column:created_at;default:NULL;comment:'创建时间'"`
+	UpdatedAt time.Time `gorm:"column:updated_at;default:NULL;comment:'更新时间'"`
+}
+
+type VmallMember struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	//Openid  string `json:"openid" structs:"openid" gorm:"not null;type:varchar(50)"`
+	Appid   string `json:"appid" structs:"appid" gorm:"not null;index;type:varchar(50)"`
+	Unionid string `json:"unionid" structs:"unionid"  gorm:"not null;type:varchar(50)"`
+
+	//Mobile  string `json:"mobile" structs:"mobile" gorm:"not null;index;type:varchar(30);comment:用户绑定的手机号"`
+	//Realname string `json:"realname" structs:"realname" gorm:"not null;type:varchar(100);comment:真实姓名"`
+	//Idcode   string `json:"idcode" gorm:"not null;type:varchar(50);comment:身份证"`
+	//InviteStaffMobile string `json:"invite_staff_mobile" gorm:"not null;index;size:50;comment:推荐员工"`
+	MobileDim                string `json:"mobile_dim" structs:"mobile_dim" gorm:"not null;index;type:varchar(30);comment:用户绑定的手机号"`
+	MobileEncrypt            string `json:"mobile_encrypt" structs:"mobile_encrypt" gorm:"not null;index;type:varchar(30);comment:用户绑定的手机号"`
+	RealnameDim              string `json:"realname_dim" structs:"realname_dim" gorm:"not null;type:varchar(100);comment:真实姓名"`
+	RealnameEncrypt          string `json:"realname_encrypt" structs:"realname_encrypt" gorm:"not null;type:varchar(100);comment:真实姓名"`
+	IdCodeDim                string `json:"id_code_dim" gorm:"not null;type:varchar(50);comment:身份证"`
+	IdCodeEncrypt            string `json:"id_code_encrypt" gorm:"not null;type:varchar(50);comment:身份证"`
+	InviteStaffMobileDim     string `json:"invite_staff_mobile_dim" gorm:"not null;index;size:50;comment:推荐员工"`
+	InviteStaffMobileEncrypt string `json:"invite_staff_mobile_encrypt" gorm:"not null;index;size:50;comment:推荐员工"`
+
+	Nickname string `json:"nickname" structs:"nickname" gorm:"not null;type:varchar(100);comment:用户昵称"`
+	Avatar   string `json:"avatar" structs:"avatar"  gorm:"not null;type:varchar(300);commemt:头像"`
+	Gendor   uint32 `json:"gendor" structs:"gendor" gorm:"not null;type:tinyint(2);comment:性别"`
+
+	Level            uint64 `json:"level" structs:"level" gorm:"not null;comment:vmall_levels表的level字段值"`
+	IsSyhOldCustomer bool   `json:"is_syh_new_customer" gorm:"not null;type:int(2);default:0;comment:是否苏邮惠老客户"`
+
+	ChannelId string `json:"channel_id" structs:"channel_id" gorm:"not null;type:varchar(50);comment:渠道ID;index:idx_channelid_deletedat_gdcstno,priority:1"`
+	StaffId   string `json:"staff_id" structs:"staff_id" gorm:"not null;type:varchar(50);comment:归属员工id"`
+
+	IdType   uint32 `json:"id_type"  gorm:"not null;type:tinyint(3);comment:证件种类:0-身份证 1-护照 2-港澳通行证 3-台湾同胞证"`
+	Province string `json:"province" gorm:"not null;type:varchar(50);comment:省"`
+	City     string `json:"city" gorm:"not null;type:varchar(100);comment:市"`
+	District string `json:"district" gorm:"not null;type:varchar(100);comment:区"`
+	Address  string `json:"address" gorm:"not null;type:varchar(300);comment:详细地址"`
+
+	Longitude float64 `json:"longitude" gorm:"not null;comment:用户授权的经度"`
+	Latitude  float64 `json:"latitude" gorm:"not null;comment:用户授权的维度"`
+
+	OfflineMember bool   `json:"offline_member" gorm:"not null;comment:是否线下会员-指代注册会员"`
+	OrgId         string `json:"org_id" structs:"org_id" gorm:"not null;type:varchar(50);comment:员工关联的归属组织架构id"`
+
+	IsPostalYsh bool `json:"is_postal_ysh" gorm:"not null;comment:是否邮生活会员"`
+
+	KeepLocalUserType bool `json:"keep_local_user_type" gorm:"not null;comment:是否保持本地设置的会员身份"`
+
+	SubId    string `json:"subId" gorm:"not null;size:50;comment:分站id"`
+	SubOrgId string `json:"subOrgId" gorm:"not null;size:50;comment:分站网点id"` // 这个字段不用了，原因：注册时传入的值不准，所以都取subId做归属判断
+
+	GzyzJoinErr string `json:"gzyz_join_err" gorm:"not null;type:text;comment:邮政入会异常信息记录"`
+
+	GdOrgId   string `json:"gd_org_id" gorm:"not null;size:50;comment:广东省客管用户的网点id"`
+	GdOrgNo   string `json:"gd_org_no" gorm:"not null;size:50;comment:广东省客管用户的网点机构号"`
+	GdCstmNo  string `json:"gd_cstm_no" gorm:"not null;size:50;comment:广东省客管用户的客户机构号;index:idx_channelid_deletedat_gdcstno,priority:3"`
+	GdCstmNos string `json:"gd_cstm_nos" gorm:"not null;size:200;comment:多个广东省客管用户的客户机构号"`
+
+	YshUserId string `json:"yshUserId" gorm:"not null;size:50;comment:邮生活的用户id"`
+
+	DeletedAt time.Time `json:"deleted_at" structs:"deleted_at" gorm:"not null;index:idx_channelid_deletedat_gdcstno,priority:2"`
+	CreatedAt time.Time `json:"created_at" structs:"created_at" gorm:"not null"`
+	UpdatedAt time.Time `json:"updated_at" structs:"updated_at" gorm:"not null"`
+}
+
+type VmallMemberRelation struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	CustomerNameEnc   string `json:"customer_name" gorm:"not null;type:varchar(100);default:'';comment:客户名(加密)"`
+	CustomerMobileEnc string `json:"customer_mobile_enc" gorm:"not null;type:varchar(100);default:'';comment:客户手机号(加密)"`
+	CustomerIdCodeEnc string `json:"customer_id_code_enc" gorm:"not null;type:varchar(100);default:'';comment:客户身份证(加密)"`
+
+	StaffId    string `json:"staff_id" gorm:"not null;type:varchar(100);default:'';comment:员工id"`
+	StaffOrgId string `json:"staff_org_id" gorm:"not null;type:varchar(100);default:'';comment:员工组织架构id"`
+	ChannelId  string `json:"channel_id" structs:"channel_id" gorm:"not null;type:varchar(50);default:'';comment:渠道ID;"`
+
+	CreatedAt time.Time `json:"createdAt" gorm:"not null"`
+	UpdatedAt time.Time `json:"updatedAt" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type VmallMemberRelationExtand struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	VmallMemberRelationId uint64 `json:"vmall_member_relation_id" gorm:"not null;type:int(11);default:0;comment:VmallMemberRelation表id"`
+	CustomerNameEnc       string `json:"customer_name" gorm:"not null;type:varchar(100);default:'';comment:客户名(加密)"`
+	CustomerMobileEnc     string `json:"customer_mobile_enc" gorm:"not null;type:varchar(100);default:'';comment:客户手机号(加密)"`
+	CustomerIdCodeEnc     string `json:"customer_id_code_enc" gorm:"not null;type:varchar(100);default:'';comment:客户身份证(加密)"`
+	RelationType          int32  `json:"relation_type" gorm:"not null;type:int(11);default:0;comment:关系类型 1:亲戚 2:朋友"`
+	StaffId               string `json:"staff_id" gorm:"not null;type:varchar(100);default:'';comment:员工id"`
+
+	CreatedAt time.Time `json:"createdAt" gorm:"not null"`
+	UpdatedAt time.Time `json:"updatedAt" gorm:"not null"`
+	DeletedAt time.Time `json:"deleted_at" gorm:"not null"`
+}
+
+type VmallMemberRelationExtandLog struct {
+	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
+
+	VmallMemberRelationExtandId uint64 `json:"vmall_member_relation_id" gorm:"not null;type:int(11);default:0;comment:VmallMemberRelationExtand表id"`
+	StaffId                     string `json:"staff_id" gorm:"not null;type:varchar(100);default:'';comment:员工id"`
+
+	CreatedAt time.Time `json:"createdAt" gorm:"not null"`
+	UpdatedAt time.Time `json:"updatedAt" gorm:"not null"`
+}
+
+type EquityGoodsExtand struct {
+	Id          uint64    `json:"id" gorm:"primary_key;autoIncrement:false"`
+	GoodsId     uint      `json:"goods_id" gorm:"default:0;not null;comment:关联商品表id"`
+	IsSyncVmall bool      `json:"is_sync_vmall" gorm:"default:0;not null;comment:是否同步到商城"`
+	AdminId     uint64    `json:"admin_id" gorm:"default:0;not null;comment:操作人id"`
+	CreatedAt   time.Time `json:"created_at"   gorm:"not null"`
+	UpdatedAt   time.Time `json:"updated_at"   gorm:"not null"`
 }
 
 type EquitySupplier struct {
@@ -99,99 +666,6 @@ type ActivityPushMessage struct {
 	ResData    string    `json:"res_data" gorm:"not null;type:text;comment:推送返回"`
 	CreatedAt  time.Time `json:"createdAt" gorm:"not null"`
 	UpdatedAt  time.Time `json:"updatedAt" gorm:"not null"`
-}
-
-type ActivityData struct {
-	Id                  uint64    `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
-	Cid                 uint64    `json:"cid" gorm:"index;not null;comment:活动id"`
-	Uid                 string    `json:"uid" gorm:"index;not null;type:varchar(50);comment:用户id"`
-	GoodsId             string    `json:"goods_id" gorm:"index;not null;type:varchar(50);comment:商品id"`
-	WyfMerchantId       string    `json:"wyf_merchant_id" gorm:"index;not null;type:varchar(50);comment:商户号"`
-	RuiyinxinMerchantId string    `json:"ruiyinxin_merchant_id" gorm:"index;not null;type:varchar(100);comment:瑞银信商户号"`
-	RealnameDim         string    `json:"realname_dim" gorm:"not null;size:100;comment:真实姓名(带*号)"`
-	RealnameEnc         string    `json:"realname_enc" gorm:"not null;size:200;comment:真实姓名(密文)"`
-	CreateStaffId       string    `json:"create_staff_id" gorm:"not null;size:50;comment:创建员工"`
-	MobileDim           string    `json:"mobile_dim" gorm:"not null;size:30;comment:手机号(带*号)"`
-	MobileEnc           string    `json:"mobile_enc" gorm:"index;not null;size:100;comment:手机号(密文)"`
-	IdCardDim           string    `json:"id_card_dim" gorm:"not null;size:100;comment:身份证(带*号)"`
-	IdCardEnc           string    `json:"id_card_enc" gorm:"not null;size:100;comment:身份证(密文)"`
-	OrgId               string    `json:"orgIds" gorm:"not null;size:50; comment:组织架构"`
-	PrizeSpoil          string    `json:"prize_spoil" gorm:"not null;size:50;comment:奖品价值"`
-	PrizeAmount         string    `json:"prize_amount" gorm:"not null;size:50;comment:奖品总价值"`
-	PrizeName           string    `json:"prize_name" gorm:"not null;type:text;comment:奖品名称"`
-	PrizeSum            string    `json:"prize_sum" gorm:"not null;size:50;comment:奖品数量"`
-	State               bool      `json:"state" gorm:"index;not null;comment:领取状态"`
-	TsState             string    `json:"ts_state" gorm:"index;not null;comment:推送状态"`
-	OrderState          bool      `json:"order_state" gorm:"index;not null;comment:订单状态"`
-	TimeDrawAt          time.Time `json:"time_draw_at" gorm:"not null;comment:领取时间"`
-	Remark              string    `json:"remark" gorm:"not null;type:text;comment:备注"`
-	BelongOrg           string    `json:"belong_org" gorm:"index,not null;size:50;comment:所属机构id"`
-	OrderNum            string    `json:"order_num" gorm:"size:50;comment:id"`
-	TaskId              string    `json:"task_id" gorm:"not null;size:100;comment:生成活动数据任务id"`
-
-	ThirdReqBody string `json:"third_req_body" gorm:"not null;type:text;comment:请求报文"`
-	ThirdRspBody string `json:"third_rsp_body" gorm:"not null;type:text;comment:响应报文"`
-	ThirdChannel string `json:"third_channel" gorm:"not null;type:varchar(300);default:'';comment:三方通道"`
-
-	ChannelId string    `json:"channel_id" gorm:"not null;index;type:varchar(50);comment:渠道ID"`
-	DeletedAt time.Time `json:"deleted_at" gorm:"index;not null"`
-	CreatedAt time.Time `json:"created_at" gorm:"not null"`
-	UpdatedAt time.Time `json:"updated_at" gorm:"not null"`
-}
-
-func (ActivityData) TableName() string {
-	return "activity_data"
-}
-
-type VmallMember struct {
-	Id uint64 `json:"id" structs:"id" gorm:"primary_key;autoIncrement:false"`
-
-	//Openid  string `json:"openid" structs:"openid" gorm:"not null;type:varchar(50)"`
-	Appid   string `json:"appid" structs:"appid" gorm:"not null;index;type:varchar(50)"`
-	Unionid string `json:"unionid" structs:"unionid"  gorm:"not null;type:varchar(50)"`
-	Mobile  string `json:"mobile" structs:"mobile" gorm:"not null;index;type:varchar(30);comment:用户绑定的手机号"`
-
-	Nickname string `json:"nickname" structs:"nickname" gorm:"not null;type:varchar(100);comment:用户昵称"`
-	Avatar   string `json:"avatar" structs:"avatar"  gorm:"not null;type:varchar(300);commemt:头像"`
-	Gendor   uint32 `json:"gendor" structs:"gendor" gorm:"not null;default:0;type:tinyint(2);comment:性别"`
-
-	Level uint64 `json:"level" structs:"level" gorm:"not null;comment:vmall_levels表的level字段值"`
-
-	ChannelId string `json:"channel_id" structs:"channel_id" gorm:"not null;type:varchar(50);comment:渠道ID;index:idx_channelid_deletedat_gdcstno,priority:1"`
-	StaffId   string `json:"staff_id" structs:"staff_id" gorm:"not null;type:varchar(50);comment:归属员工id"`
-
-	Realname string `json:"realname" structs:"realname" gorm:"not null;type:varchar(100);comment:真实姓名"`
-	IdType   uint32 `json:"id_type"  gorm:"not null;type:tinyint(3);comment:证件种类:0-身份证 1-护照 2-港澳通行证 3-台湾同胞证"`
-	Idcode   string `json:"idcode" gorm:"not null;type:varchar(50);comment:身份证"`
-	Province string `json:"province" gorm:"not null;type:varchar(50);comment:省"`
-	City     string `json:"city" gorm:"not null;type:varchar(100);comment:市"`
-	District string `json:"district" gorm:"not null;type:varchar(100);comment:区"`
-	Address  string `json:"address" gorm:"not null;type:varchar(300);comment:详细地址"`
-
-	Longitude float64 `json:"longitude" gorm:"not null;comment:用户授权的经度"`
-	Latitude  float64 `json:"latitude" gorm:"not null;comment:用户授权的维度"`
-
-	OfflineMember     bool   `json:"offline_member" gorm:"not null;comment:是否线下会员-指代注册会员"`
-	InviteStaffMobile string `json:"invite_staff_mobile" gorm:"not null;index;size:50;comment:推荐员工"`
-	OrgId             string `json:"org_id" structs:"org_id" gorm:"not null;type:varchar(50);comment:员工关联的归属组织架构id"`
-
-	IsPostalYsh bool `json:"is_postal_ysh" gorm:"not null;comment:是否邮生活会员"`
-
-	KeepLocalUserType bool `json:"keep_local_user_type" gorm:"not null;comment:是否保持本地设置的会员身份"`
-
-	SubId    string `json:"subId" gorm:"not null;size:50;comment:分站id"`
-	SubOrgId string `json:"subOrgId" gorm:"not null;size:50;comment:分站网点id"` // 这个字段不用了，原因：注册时传入的值不准，所以都取subId做归属判断
-
-	GzyzJoinErr string `json:"gzyz_join_err" gorm:"not null;type:text;comment:邮政入会异常信息记录"`
-
-	GdOrgId   string `json:"gd_org_id" gorm:"not null;size:50;comment:广东省客管用户的网点id"`
-	GdOrgNo   string `json:"gd_org_no" gorm:"not null;size:50;comment:广东省客管用户的网点机构号"`
-	GdCstmNo  string `json:"gd_cstm_no" gorm:"not null;size:50;comment:广东省客管用户的客户机构号;index:idx_channelid_deletedat_gdcstno,priority:3"`
-	GdCstmNos string `json:"gd_cstm_nos" gorm:"not null;size:200;comment:多个广东省客管用户的客户机构号"`
-
-	DeletedAt time.Time `json:"deleted_at" structs:"deleted_at" gorm:"not null;index:idx_channelid_deletedat_gdcstno,priority:2"`
-	CreatedAt time.Time `json:"created_at" structs:"created_at" gorm:"not null"`
-	UpdatedAt time.Time `json:"updated_at" structs:"updated_at" gorm:"not null"`
 }
 
 type VmallMemberPoint struct {
@@ -345,29 +819,6 @@ func JsonMarshal(m interface{}) string {
 	return str
 }
 
-type VmallInterPointCheckIn struct {
-	Id uint64 `json:"id,omitempty" gorm:"column:id;primary_key;AUTO_INCREMENT;NOT NULL"`
-	//SubIds      []string `json:"sub_ids,omitempty" gorm:"column:sub_ids;type:varchar(300);default:'';comment:'所属分站'"`
-	CheckInType GormStrSlice `json:"check_in_type,omitempty" gorm:"column:check_in_type;type:text;comment:'签到类型'"`
-	//CycleValue  []string  `json:"cycle_value,omitempty" gorm:"column:cycle_value;type:varchar(2000);default:'';comment:'周期对应积分数值'"`
-	Cycle int32 `json:"cycle,omitempty" gorm:"column:cycle;type:int(11);default:0;comment:'签到周期'"`
-	//Status     int32     `json:"status,omitempty" gorm:"column:status;type:int(11);default:0;comment:'状态  0：关闭 1:开启'"`
-	RepCheckIn bool      `json:"rep_check_in,omitempty" gorm:"column:rep_check_in;type:int(11);default:0;comment:'中断签到是否重签'"`
-	CreatedAt  time.Time `gorm:"column:created_at;default:NULL;comment:'创建时间'"`
-	UpdatedAt  time.Time `gorm:"column:updated_at;default:NULL;comment:'更新时间'"`
-	DeletedAt  time.Time `gorm:"column:deleted_at;default:NULL;comment:'删除时间'"`
-}
-
-type VmallInterPointCheckInLog struct {
-	Id        int64     `json:"id" gorm:"primary_key;autoIncrement:false"`
-	ActId     uint64    `json:"act_id,omitempty" gorm:"column:act_id;type:int(11);default:0;comment:'任务id'"`
-	Uid       uint64    `json:"uid,omitempty" gorm:"column:uid;default:0;comment:'用户id'"`
-	Point     int64     `json:"point,omitempty" gorm:"column:point;type:int(11);default:0;comment:'领取积分数'"`
-	CreatedAt time.Time `gorm:"column:created_at;default:NULL;comment:'创建时间'"`
-	UpdatedAt time.Time `gorm:"column:updated_at;default:NULL;comment:'更新时间'"`
-	DeletedAt time.Time `gorm:"column:deleted_at;default:NULL;comment:'删除时间'"`
-}
-
 func (v *VmallInterPointCheckIn) Find(ctx context.Context, db *gorm.DB) []VmallInterPointCheckIn {
 
 	l := []VmallInterPointCheckIn{}
@@ -486,4 +937,21 @@ type VmallMemberPointLog struct {
 	DeletedAt time.Time `json:"deleted_at"  structs:"deleted_at"  gorm:"index;not null"`
 	CreatedAt time.Time `json:"created_at"  structs:"created_at"  gorm:"not null;index:idx_created_state_pointtype,priority:1"`
 	UpdatedAt time.Time `json:"updated_at"  structs:"updated_at"  gorm:"not null"`
+}
+
+type StringArrayStruct []string
+
+func (array StringArrayStruct) Value() (driver.Value, error) {
+	str := JsonMarshal(array)
+	if str == "" {
+		str = "[]"
+	}
+	return []byte(str), nil
+}
+func (array *StringArrayStruct) Scan(value interface{}) error {
+	b, ok := value.([]byte)
+	if !ok {
+		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
+	}
+	return json.Unmarshal(b, array)
 }
